@@ -1,25 +1,12 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "local.h"
+void daemonize(const char *cmd);
 
-struct clients_array
-{
-    int fd[MAX_CLIENTS];
-    int count;
-};
+int already_running(void);
 
-int setreuseaddr(int sockfd);
+int ignore_signal(int signal);
 
-int delete_client(struct clients_array *clients, int sockfd);
-int add_client(struct clients_array *clients, int sockfd);
-
-int setnonblocking(int desc, int value);
-
-int create_listen_tcp_socket();
-
-int send_msg_close(int sock, const char *msg);
-
-int send_to_clients(const struct clients_array *clients, const char *message, int msg_len, int source_sock);
+void err_quit(const char *msg);
 
 #endif // UTILS_H

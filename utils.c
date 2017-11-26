@@ -1,119 +1,94 @@
 #include "utils.h"
 
-#include <string.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <stdio.h>
-#include <errno.h>
 #include <stdlib.h>
-#include <netinet/ip.h>
+#include <stdio.h>
+#include <syslog.h>
+#include <fcntl.h>
+#include <sys/resource.h>
+#include <sys/signal.h>
+#include <errno.h>
 
-#include "local.h"
+#define LOCKFILE "/var/run/chatserver.pid"
 
-int setnonblocking(int desc, int value)
+int ignore_signal(int signal)
 {
-    int oldflags = fcntl(desc, F_GETFL, 0);
-
-    if (oldflags == -1)
-        return -1;
-
-    if (value != 0)
-        oldflags |= O_NONBLOCK;
-    else
-        oldflags &= ~O_NONBLOCK;
-
-    return fcntl(desc, F_SETFL, oldflags);
+    struct sigaction sa;
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    return sigaction(signal, &sa, NULL);
 }
 
-int create_listen_tcp_socket(int port)
+void daemonize(const char *cmd)
 {
-    int listen_sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (listen_sock < 0)
-    {
-        perror("Socket creation");
-        exit(EXIT_FAILURE);
-    }
+    int i, fd0, fd1, fd2;
+    pid_t pid;
+    struct rlimit rl;
 
+    umask(0);
 
-    setnonblocking(listen_sock, 1);
+    if (getrlimit(RLIMIT_NOFILE, &rl) < 0)
+        err_quit("getrlimit (daemonize)");
 
-    setreuseaddr(listen_sock);
+    if ((pid = fork()) < 0)
+        err_quit("fork (daemonize)");
 
-    struct sockaddr_in servaddr;
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port = htons(port);
+    else if (pid != 0) /* родительский процесс */
+        exit(0);
 
-    if (bind(listen_sock, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0)
-    {
-        perror("Socket bind");
-        exit(EXIT_FAILURE);
-    }
+    setsid();
 
-    if (listen(listen_sock, BACK_LOG) < 0)
-    {
-        perror("Socket listen");
-        exit(EXIT_FAILURE);
-    }
-    return listen_sock;
+    if (ignore_signal(SIGHUP) < 0)
+        err_quit("sighup ignore (daemonize)");
+
+    if (chdir("/") < 0)
+        err_quit("chdir (daemonize)");
+
+    if (rl.rlim_max == RLIM_INFINITY)
+        rl.rlim_max = 1024;
+    for (i = 0; i < rl.rlim_max; i++)
+        close(i);
+
+    fd0 = open("/dev/null", O_RDWR);
+    fd1 = dup(0);
+    fd2 = dup(0);
+
 }
 
-int send_msg_close(int sock, const char *msg)
+int already_running(void)
 {
-    send(sock, msg, strlen(msg), 0);
-    shutdown(sock, SHUT_WR);
-    char buffer[4000];
-    for (;;)
+    int fd;
+    char buf[16];
+    fd = open(LOCKFILE, O_RDWR|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+    if (fd < 0)
     {
-        int res = read(sock, buffer, 4000);
-        if(res < 0)
+        printf("Невозможно открыть %s: %s", LOCKFILE, strerror(errno));
+        exit(1);
+    }
+
+    struct flock lock;
+    memset(&lock, 0, sizeof(lock));
+    lock.l_type = F_WRLCK;
+    if (fcntl(fd, F_SETLKW, &lock) < 0)
+    {
+        if (errno == EACCES || errno == EAGAIN)
         {
-            perror("reading before close");
-            exit(1);
+            close(fd);
+            return(1);
         }
-        if(!res)
-            break;
+        printf("Невозможно установить блокировку на %s: %s",
+        LOCKFILE, strerror(errno));
+        exit(1);
     }
-    close(sock);
+    ftruncate(fd, 0);
+    snprintf(buf, 16, "%ld", (long)getpid());
+    write(fd, buf, strlen(buf)+1);
+    return(0);
 }
 
-int delete_client(struct clients_array *clients, int sockfd)
-{
-    int i = 0;
-    for (; i < clients->count && clients->fd[i] != sockfd; i++);
 
-    if (i == clients->count)
-        return -1;
-    memmove(clients->fd + i, clients->fd + i + 1, clients->count - i - 1);
-    clients->count--;
-    return i;
-}
-
-int add_client(struct clients_array *clients, int sockfd)
+void err_quit(const char *msg)
 {
-    if (clients->count == MAX_CLIENTS)
-        return -1;
-    clients->fd[clients->count++] = sockfd;
-    return 0;
-}
-
-int send_to_clients(const struct clients_array *clients, const char *message, int msg_len, int source_sock)
-{
-    for (int i = 0; i < clients->count; i++)
-    {
-        if (clients->fd[i] != source_sock)
-        {
-            int sentbytes = 0;
-            while (sentbytes < msg_len)
-                sentbytes = send(clients->fd[i], message + sentbytes, msg_len - sentbytes, 0);
-        }
-    }
-    return 0;
-}
-
-int setreuseaddr(int sockfd)
-{
-    int enable = 1;
-    return setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&enable, sizeof(enable));
+    perror(msg);
+    exit(EXIT_FAILURE);
 }

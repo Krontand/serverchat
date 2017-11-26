@@ -11,6 +11,6 @@
 
 #define MSG_NO_PLACES       "Sorry, but there are no places on the server. :("
 
-#define LOG_FILE "./log.txt"
+#define LOG_FILE "/var/log/chatserver.log"
 
 #endif // LOCAL_H

@@ -4,18 +4,30 @@
 #include <sys/signal.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#include <syslog.h>
 
+#include "net_utils.h"
 #include "utils.h"
 #include "logger.h"
 
-int main()
+int main(int argc, char *argv[])
 {
+    if (argc < 2)
+    {
+        printf("Usage: server <port>\n");
+        exit(0);
+    }
+
+    if (already_running())
+        err_quit("Server already started");
+
+    daemonize(argv[0]);
+
     open_log(LOG_FILE);
 
-    signal(SIGPIPE, SIG_IGN);
+    ignore_signal(SIGPIPE);
 
-    int serv_port = 5000;
-
+    int serv_port = atoi(argv[1]);
     int listen_sock = create_listen_tcp_socket(serv_port);
 
     int epollfd = epoll_create(MAX_EVENTS);
@@ -24,10 +36,7 @@ int main()
     ev.events = EPOLLIN | EPOLLET;
     ev.data.fd = listen_sock;   
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_sock, &ev) < 0)
-    {
-        perror("Epoll fd add");
-        exit(EXIT_FAILURE);
-    }
+        err_quit("Epoll fd add");
 
     socklen_t addrlen;
     // Массив готовых дескрипторов
@@ -40,10 +49,7 @@ int main()
     {
         int nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
         if (nfds == -1)
-        {
-            perror("epoll_wait");
-            exit(EXIT_FAILURE);
-        }
+            err_quit("epoll_wait");
 
         for (int n = 0; n < nfds; ++n)
         {
@@ -51,11 +57,9 @@ int main()
             {
                 struct sockaddr cliaddr;
                 int conn_sock = accept(listen_sock, (struct sockaddr*) &cliaddr, &addrlen);
+
                 if (conn_sock == -1)
-                {
-                    perror("accept");
-                    exit(EXIT_FAILURE);
-                }
+                    err_quit("accept");
 
                 setnonblocking(conn_sock, 1);
                 setreuseaddr(conn_sock);
@@ -65,17 +69,12 @@ int main()
                     ev.events = EPOLLIN | EPOLLRDHUP | EPOLLET;
                     ev.data.fd = conn_sock;
                     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1)
-                    {
-                        perror("epoll_ctl: conn_sock");
-                        exit(EXIT_FAILURE);
-                    }
+                        err_quit("epoll_ctl: conn_sock");
 
                     add_client(&clients, conn_sock);
                 }
                 else
-                {
                     send_msg_close(conn_sock, MSG_NO_PLACES);
-                }
             }
             else
             {
@@ -92,7 +91,7 @@ int main()
                     char received_msg[MAX_MSG_LEN];
                     int receivedbytes = 0;
                     while (receivedbytes <= 0)
-                           receivedbytes = recv(event_socket, received_msg, MAX_MSG_LEN, 0);
+                        receivedbytes = recv(event_socket, received_msg, MAX_MSG_LEN, 0);
 
                     write_log(received_msg);
 

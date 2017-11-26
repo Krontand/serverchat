@@ -2,11 +2,11 @@ CC=gcc
 
 CFLAGS = -Wall
 
-TARGET = server
+TARGET = chatserver
 
 PREFIX = /usr/local/bin
 
-SRCS = main.c utils.c logger.c
+SRCS = main.c net_utils.c utils.c logger.c
 
 OBJS = $(SRCS:.c=.o)
 
