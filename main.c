@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_sock, &ev) < 0)
         err_quit("Epoll fd add");
 
-    struct epoll_event events[MAX_EVENTS];
+    struct epoll_event *events = malloc(sizeof(struct epoll_event) * MAX_EVENTS);
 
     // Array for storing all current clients (for sending messages)
     struct clients_array *clients = malloc(sizeof(struct clients_array));

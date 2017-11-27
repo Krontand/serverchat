@@ -3,7 +3,7 @@
 
 #define MAX_EVENTS 10000
 
-#define BACK_LOG 10000
+#define BACK_LOG 128
 
 #define MAX_CLIENTS 10000
 
