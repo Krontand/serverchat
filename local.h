@@ -1,9 +1,9 @@
 #ifndef LOCAL_H
 #define LOCAL_H
 
-#define MAX_EVENTS 1000
+#define MAX_EVENTS 10000
 
-#define BACK_LOG 1000
+#define BACK_LOG 10000
 
 #define MAX_CLIENTS 10000
 
