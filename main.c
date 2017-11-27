@@ -28,6 +28,7 @@ int main(int argc, char *argv[])
     ignore_signal(SIGPIPE);
 
     int serv_port = atoi(argv[1]);
+    // that's socket(), bind(), listen() with so_reuseaddr and nonblock options
     int listen_sock = create_listen_tcp_socket(serv_port);
 
     int epollfd = epoll_create(MAX_EVENTS);
@@ -38,12 +39,11 @@ int main(int argc, char *argv[])
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_sock, &ev) < 0)
         err_quit("Epoll fd add");
 
-    socklen_t addrlen;
-    // Массив готовых дескрипторов
     struct epoll_event events[MAX_EVENTS];
 
-    struct clients_array clients;
-    clients.count = 0;
+    // Array for storing all current clients (for sending messages)
+    struct clients_array *clients = malloc(sizeof(struct clients_array));
+    clients->count = 0;
 
     for (;;)
     {
@@ -55,47 +55,57 @@ int main(int argc, char *argv[])
         {
             if (events[n].data.fd == listen_sock)
             {
-                struct sockaddr cliaddr;
-                int conn_sock = accept(listen_sock, (struct sockaddr*) &cliaddr, &addrlen);
+                struct sockaddr_in cliaddr;
+                socklen_t addrlen = sizeof(cliaddr);
+                int conn_sock = accept4(listen_sock, (struct sockaddr*) &cliaddr, &addrlen, SOCK_NONBLOCK);
 
                 if (conn_sock == -1)
                     err_quit("accept");
 
-                setnonblocking(conn_sock, 1);
                 setreuseaddr(conn_sock);
 
-                if (clients.count < MAX_CLIENTS)
+                if (clients->count < MAX_CLIENTS)
                 {
+                    // Using own struct to store in epoll socket fd and ip:port as a string (for logging)
+                    struct client *newclient = malloc(sizeof(struct client));
+                    get_ip_port(newclient->addr, sizeof(newclient->addr), cliaddr);
+                    newclient->sockfd = conn_sock;
+
                     ev.events = EPOLLIN | EPOLLRDHUP | EPOLLET;
-                    ev.data.fd = conn_sock;
+                    ev.data.ptr = newclient;
                     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1)
                         err_quit("epoll_ctl: conn_sock");
 
-                    add_client(&clients, conn_sock);
+                    add_client(clients, conn_sock);
                 }
                 else
+                {
+                    // Server is full
                     send_msg_close(conn_sock, MSG_NO_PLACES);
+                }
             }
             else
             {
+                int event_socket = ((struct client*)events[n].data.ptr)->sockfd;
                 if (events[n].events & EPOLLHUP ||
                         events[n].events & EPOLLERR ||
                         events[n].events & EPOLLRDHUP)
                 {
-                    delete_client(&clients, events[n].data.fd);
-                    close(events[n].data.fd, SHUT_RDWR);
+                    delete_client(clients, event_socket);
+                    free(events[n].data.ptr);
+                    close(event_socket, SHUT_RDWR);
                 }
                 else if (events[n].events & EPOLLIN)
                 {
-                    int event_socket = events[n].data.fd;
                     char received_msg[MAX_MSG_LEN];
                     int receivedbytes = 0;
                     while (receivedbytes <= 0)
                         receivedbytes = recv(event_socket, received_msg, MAX_MSG_LEN, 0);
 
-                    write_log(received_msg);
+                    received_msg[receivedbytes] = '\0';
+                    write_log(((struct client*)events[n].data.ptr)->addr, received_msg);
 
-                    send_to_clients(&clients, received_msg, receivedbytes, event_socket);
+                    send_to_clients(clients, received_msg, receivedbytes, event_socket);
                 }
 
             }

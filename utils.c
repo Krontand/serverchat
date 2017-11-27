@@ -7,6 +7,7 @@
 #include <sys/resource.h>
 #include <sys/signal.h>
 #include <errno.h>
+#include <time.h>
 
 #define LOCKFILE "/var/run/chatserver.pid"
 
@@ -33,7 +34,7 @@ void daemonize(const char *cmd)
     if ((pid = fork()) < 0)
         err_quit("fork (daemonize)");
 
-    else if (pid != 0) /* родительский процесс */
+    else if (pid != 0)
         exit(0);
 
     setsid();
@@ -91,4 +92,12 @@ void err_quit(const char *msg)
 {
     perror(msg);
     exit(EXIT_FAILURE);
+}
+
+
+int get_time(char *timebuf, int size)
+{
+    time_t t = time(NULL);
+    struct tm tm = *localtime(&t);
+    return snprintf(timebuf, size, "%d:%d:%d", tm.tm_hour, tm.tm_min, tm.tm_sec);
 }

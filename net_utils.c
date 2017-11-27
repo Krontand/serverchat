@@ -3,11 +3,12 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <sys/socket.h>
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <netinet/ip.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include "local.h"
 #include "utils.h"
@@ -105,4 +106,9 @@ int setreuseaddr(int sockfd)
 {
     int enable = 1;
     return setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&enable, sizeof(enable));
+}
+
+int get_ip_port(char *buf, int buf_size, struct sockaddr_in addr)
+{
+    return snprintf(buf, buf_size, "%s:%d", inet_ntoa(addr.sin_addr), addr.sin_port);
 }
