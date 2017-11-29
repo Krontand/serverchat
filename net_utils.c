@@ -84,6 +84,9 @@ int add_client(struct clients_array *clients, int sockfd)
 {
     if (clients->count == MAX_CLIENTS)
         return -1;
+
+    struct client *newclient = malloc(sizeof(struct client));
+
     clients->fd[clients->count++] = sockfd;
     return 0;
 }

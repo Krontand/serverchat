@@ -109,12 +109,18 @@ int main(int argc, char *argv[])
                     char received_msg[MAX_MSG_LEN];
                     int receivedbytes = 0;
                     while (receivedbytes <= 0)
-                        receivedbytes = recv(event_socket, received_msg, MAX_MSG_LEN, 0);
+                    {
+                        receivedbytes = recv(event_socket, received_msg, MAX_MSG_LEN - 1, 0);
+                    }
 
                     received_msg[receivedbytes] = '\0';
                     write_log(((struct client*)events[n].data.ptr)->addr, received_msg);
 
                     send_to_clients(clients, received_msg, receivedbytes, event_socket);
+                }
+                else if (events[n].events & EPOLLOUT)
+                {
+                    flush_buffer((struct client*)events[n].data.ptr);
                 }
 
             }

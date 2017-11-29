@@ -5,17 +5,7 @@
 
 #include "local.h"
 
-struct clients_array
-{
-    int fd[MAX_CLIENTS];
-    int count;
-};
 
-struct client
-{
-    int sockfd;
-    char addr[22];
-};
 
 // Set SO_REUSEADDR option
 int setreuseaddr(int sockfd);
