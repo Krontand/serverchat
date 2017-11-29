@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <syslog.h>
+#include <errno.h>
 
 #include "net_utils.h"
 #include "utils.h"
@@ -35,7 +36,9 @@ int main(int argc, char *argv[])
 
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLET;
-    ev.data.fd = listen_sock;   
+    struct client *listener = malloc(sizeof(struct client));
+    listener->sockfd = listen_sock;
+    ev.data.ptr = listener;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_sock, &ev) < 0)
         err_quit("Epoll fd add");
 
@@ -53,35 +56,41 @@ int main(int argc, char *argv[])
 
         for (int n = 0; n < nfds; ++n)
         {
-            if (events[n].data.fd == listen_sock)
+            if (((struct client*)events[n].data.ptr)->sockfd == listen_sock)
             {
                 struct sockaddr_in cliaddr;
                 socklen_t addrlen = sizeof(cliaddr);
-                int conn_sock = accept4(listen_sock, (struct sockaddr*) &cliaddr, &addrlen, SOCK_NONBLOCK);
-
-                if (conn_sock == -1)
-                    err_quit("accept");
-
-                setreuseaddr(conn_sock);
-
-                if (clients->count < MAX_CLIENTS)
+                int conn_sock;
+                while ((conn_sock = accept4(listen_sock, (struct sockaddr*) &cliaddr, &addrlen, SOCK_NONBLOCK)) != -1)
                 {
-                    // Using own struct to store in epoll socket fd and ip:port as a string (for logging)
-                    struct client *newclient = malloc(sizeof(struct client));
-                    get_ip_port(newclient->addr, sizeof(newclient->addr), cliaddr);
-                    newclient->sockfd = conn_sock;
+                    if (conn_sock == -1)
+                        err_quit("accept");
 
-                    ev.events = EPOLLIN | EPOLLRDHUP | EPOLLET;
-                    ev.data.ptr = newclient;
-                    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1)
-                        err_quit("epoll_ctl: conn_sock");
+                    setreuseaddr(conn_sock);
 
-                    add_client(clients, conn_sock);
+                    if (clients->count < MAX_CLIENTS)
+                    {
+                        // Using own struct to store in epoll socket fd and ip:port as a string (for logging)
+                        struct client *newclient = malloc(sizeof(struct client));
+                        get_ip_port(newclient->addr, sizeof(newclient->addr), cliaddr);
+                        newclient->sockfd = conn_sock;
+
+                        ev.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET;
+                        ev.data.ptr = newclient;
+                        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1)
+                            err_quit("epoll_ctl: conn_sock");
+
+                        add_client(clients, conn_sock);
+                    }
+                    else
+                    {
+                        // Server is full
+                        send_msg_close(conn_sock, MSG_NO_PLACES);
+                    }
                 }
-                else
+                if (errno != EAGAIN && errno != EWOULDBLOCK)
                 {
-                    // Server is full
-                    send_msg_close(conn_sock, MSG_NO_PLACES);
+                    err_quit("accept error");
                 }
             }
             else
