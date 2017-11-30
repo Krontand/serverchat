@@ -1,7 +1,7 @@
 #ifndef queue_H
 #define queue_H
 
-#define DEFAULT_SIZE 1000000
+#define DEFAULT_SIZE 100000
 #define REALLOC_COEF 1.5
 
 struct queue
@@ -14,15 +14,17 @@ struct queue
 };
 
 
-void init_queue(struct queue *buf, int size);
-void free_queue(struct queue *buf);
+void init_queue(struct queue **buf, int size);
+void free_queue(struct queue **buf);
 
-int push_queue(struct queue *buf, const char *data, int n);
+void push_queue(struct queue *buf, const char *data, int n);
 
 // Just shifting head, there is no real data copying
 int pop_queue(struct queue *buf, int n);
 
-void realloc_queue(struct queue *buf);
+char* top(struct queue *buf);
+
+void realloc_queue(struct queue **buf);
 
 // Move queue to the beginning of buffer
 void shift_queue(struct queue *buf);

@@ -7,7 +7,7 @@
 
 #define MAX_CLIENTS 10000
 
-#define MAX_MSG_LEN 1024
+#define MAX_MSG_LEN 4096
 
 #define MSG_NO_PLACES       "Sorry, but there are no places on the server. :("
 

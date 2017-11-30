@@ -13,6 +13,7 @@
 #include "local.h"
 #include "utils.h"
 
+
 int setnonblocking(int desc, int value)
 {
     int oldflags = fcntl(desc, F_GETFL, 0);
@@ -52,7 +53,7 @@ int create_listen_tcp_socket(int port)
     return listen_sock;
 }
 
-int send_msg_close(int sock, const char *msg)
+void send_msg_close(int sock, const char *msg)
 {
     send(sock, msg, strlen(msg), 0);
     shutdown(sock, SHUT_WR);
@@ -68,38 +69,14 @@ int send_msg_close(int sock, const char *msg)
     close(sock);
 }
 
-int delete_client(struct clients_array *clients, int sockfd)
-{
-    int i = 0;
-    for (; i < clients->count && clients->fd[i] != sockfd; i++);
-
-    if (i == clients->count)
-        return -1;
-    memmove(clients->fd + i, clients->fd + i + 1, clients->count - i - 1);
-    clients->count--;
-    return i;
-}
-
-int add_client(struct clients_array *clients, int sockfd)
-{
-    if (clients->count == MAX_CLIENTS)
-        return -1;
-
-    struct client *newclient = malloc(sizeof(struct client));
-
-    clients->fd[clients->count++] = sockfd;
-    return 0;
-}
-
-int send_to_clients(const struct clients_array *clients, const char *message, int msg_len, int source_sock)
+int send_to_clients(struct clients_array *clients, const char *message, int msg_len, int source_sock)
 {
     for (int i = 0; i < clients->count; i++)
     {
-        if (clients->fd[i] != source_sock)
+        if (clients->client[i]->sockfd != source_sock)
         {
-            int sentbytes = 0;
-            while (sentbytes < msg_len)
-                sentbytes = send(clients->fd[i], message + sentbytes, msg_len - sentbytes, 0);
+            push_queue(clients->client[i]->buffer, message, msg_len);
+            flush_queue(clients->client[i]);
         }
     }
     return 0;
@@ -114,4 +91,27 @@ int setreuseaddr(int sockfd)
 int get_ip_port(char *buf, int buf_size, struct sockaddr_in addr)
 {
     return snprintf(buf, buf_size, "%s:%d", inet_ntoa(addr.sin_addr), addr.sin_port);
+}
+
+void flush_queue(struct client *client)
+{
+    if (client->writable)
+    {
+        int sent = 0;
+        int sb = 0;
+        while (sb != -1 && sent < client->buffer->count)
+        {
+            sb = send(client->sockfd, top(client->buffer) + sent, client->buffer->count - sent, 0);
+            if (sb != -1)
+                sent += sb;
+        }
+        if (sb == -1)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                client->writable = 0;
+            else
+                err_quit("flush_queue");
+        }
+        pop_queue(client->buffer, sent);
+    }
 }

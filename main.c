@@ -9,6 +9,7 @@
 
 #include "net_utils.h"
 #include "utils.h"
+#include "clientstorage.h"
 #include "logger.h"
 
 int main(int argc, char *argv[])
@@ -54,7 +55,7 @@ int main(int argc, char *argv[])
         if (nfds == -1)
             err_quit("epoll_wait");
 
-        for (int n = 0; n < nfds; ++n)
+        for (int n = 0; n < nfds; n++)
         {
             if (((struct client*)events[n].data.ptr)->sockfd == listen_sock)
             {
@@ -63,24 +64,16 @@ int main(int argc, char *argv[])
                 int conn_sock;
                 while ((conn_sock = accept4(listen_sock, (struct sockaddr*) &cliaddr, &addrlen, SOCK_NONBLOCK)) != -1)
                 {
-                    if (conn_sock == -1)
-                        err_quit("accept");
-
                     setreuseaddr(conn_sock);
 
                     if (clients->count < MAX_CLIENTS)
                     {
-                        // Using own struct to store in epoll socket fd and ip:port as a string (for logging)
-                        struct client *newclient = malloc(sizeof(struct client));
-                        get_ip_port(newclient->addr, sizeof(newclient->addr), cliaddr);
-                        newclient->sockfd = conn_sock;
-
+                        ev.data.ptr = add_client(clients, conn_sock, cliaddr);
                         ev.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET;
-                        ev.data.ptr = newclient;
+
                         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1)
                             err_quit("epoll_ctl: conn_sock");
 
-                        add_client(clients, conn_sock);
                     }
                     else
                     {
@@ -100,18 +93,22 @@ int main(int argc, char *argv[])
                         events[n].events & EPOLLERR ||
                         events[n].events & EPOLLRDHUP)
                 {
-                    delete_client(clients, event_socket);
-                    free(events[n].data.ptr);
+                    delete_client(clients, events[n].data.ptr);
                     close(event_socket, SHUT_RDWR);
                 }
                 else if (events[n].events & EPOLLIN)
                 {
                     char received_msg[MAX_MSG_LEN];
                     int receivedbytes = 0;
-                    while (receivedbytes <= 0)
+                    int rc = 0;
+                    while (rc != -1 && receivedbytes < MAX_MSG_LEN - 1)
                     {
-                        receivedbytes = recv(event_socket, received_msg, MAX_MSG_LEN - 1, 0);
+                        rc = recv(event_socket, received_msg + receivedbytes, MAX_MSG_LEN - receivedbytes, 0);
+                        if (rc != -1)
+                            receivedbytes += rc;
                     }
+                    if (rc == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
+                        err_quit("recv");
 
                     received_msg[receivedbytes] = '\0';
                     write_log(((struct client*)events[n].data.ptr)->addr, received_msg);
@@ -120,7 +117,8 @@ int main(int argc, char *argv[])
                 }
                 else if (events[n].events & EPOLLOUT)
                 {
-                    flush_buffer((struct client*)events[n].data.ptr);
+                    ((struct client*)events[n].data.ptr)->writable = 1;
+                    flush_queue(events[n].data.ptr);
                 }
 
             }

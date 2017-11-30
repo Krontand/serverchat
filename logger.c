@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
+#include <stdio.h>
 
 #include "net_utils.h"
 #include "utils.h"
@@ -18,7 +19,6 @@ void write_log(const char *addr, const char *message)
 {
     const int buf_size = MAX_MSG_LEN + 50;
     char buf[buf_size];
-
     char timebuf[30];
     get_time(timebuf, 30);
 

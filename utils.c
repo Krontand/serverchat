@@ -8,6 +8,7 @@
 #include <sys/signal.h>
 #include <errno.h>
 #include <time.h>
+#include <string.h>
 
 #define LOCKFILE "/var/run/chatserver.pid"
 
