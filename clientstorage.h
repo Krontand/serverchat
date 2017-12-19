@@ -23,9 +23,11 @@ struct client
 
 // Functions to work with struct clients_array
 int delete_client(struct clients_array *clients, struct client *client);
+// Добаление нового клиента в массив клиентов (возвращает указатель на данные клиента для хранения в epoll)
 struct client *add_client(struct clients_array *clients, int sockfd, struct sockaddr_in addr, char* nick);
-
+// Инициализация структуры клиента
 void init_client(struct client **client, int sockfd, struct sockaddr_in addr, char *nick);
+// Освобождение структуры клиента
 void free_client(struct client **client);
 
 #endif // CLIENTSTORAGE_H

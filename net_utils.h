@@ -8,9 +8,9 @@
 
 // Set SO_REUSEADDR option
 int setreuseaddr(int sockfd);
-
+// Установка сокета в неблокирующий режим
 int setnonblocking(int desc, int value);
-
+// Создание слушающего сокета
 int create_listen_tcp_socket(int port);
 
 // Send message to socket and close connection correctly
@@ -22,6 +22,7 @@ int send_to_clients(struct clients_array *clients, const char *message, int msg_
 // Write socket ip and port to string
 int get_ip_port(char *buf, int buf_size, struct sockaddr_in addr);
 
+// Отослать сообщения из очереди клиенту
 void flush_queue(struct client *client);
 
 #endif // UTILS_H
