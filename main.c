@@ -20,14 +20,13 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
+/*
     if (already_running())
         err_quit("Server already started");
 
     daemonize(argv[0]);
-
+*/
     open_log(LOG_FILE);
-
-    ignore_signal(SIGPIPE);
 
     int serv_port = atoi(argv[1]);
     // that's socket(), bind(), listen() with so_reuseaddr and nonblock options
@@ -68,7 +67,12 @@ int main(int argc, char *argv[])
 
                     if (clients->count < MAX_CLIENTS)
                     {
-                        ev.data.ptr = add_client(clients, conn_sock, cliaddr);
+                        int rc = 0;
+                        char nick[20];
+                        while (rc <= 0)
+                            rc = recv(conn_sock, nick, 20, 0);
+
+                        ev.data.ptr = add_client(clients, conn_sock, cliaddr, nick);
                         ev.events = EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET;
 
                         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev) == -1)

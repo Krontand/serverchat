@@ -71,10 +71,23 @@ void send_msg_close(int sock, const char *msg)
 
 int send_to_clients(struct clients_array *clients, const char *message, int msg_len, int source_sock)
 {
+    char *srcnick;
+    int nicklen = 0;
+    for (int i = 0; i < clients->count; i++)
+    {
+        if (clients->client[i]->sockfd == source_sock)
+        {
+            srcnick = &(clients->client[i]->nick[0]);
+            for (nicklen = 0; srcnick[nicklen] != ' '; nicklen++)
+                ;
+            nicklen++;
+        }
+    }
     for (int i = 0; i < clients->count; i++)
     {
         if (clients->client[i]->sockfd != source_sock)
         {
+            push_queue(clients->client[i]->buffer, srcnick, nicklen);
             push_queue(clients->client[i]->buffer, message, msg_len);
             flush_queue(clients->client[i]);
         }

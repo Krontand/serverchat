@@ -4,12 +4,13 @@
 #include <stdio.h>
 #include <string.h>
 
-void init_client(struct client **client, int sockfd, struct sockaddr_in addr)
+void init_client(struct client **client, int sockfd, struct sockaddr_in addr, char *nick)
 {
     *client = malloc(sizeof(struct client));
     init_queue(&((*client)->buffer), DEFAULT_SIZE);
     (*client)->sockfd = sockfd;
     get_ip_port((*client)->addr, sizeof((*client)->addr), addr);
+    memcpy((*client)->nick, nick, sizeof((*client)->nick));
     (*client)->writable = 0;
 }
 
@@ -37,13 +38,13 @@ int delete_client(struct clients_array *clients, struct client *client)
     return i;
 }
 
-struct client* add_client(struct clients_array *clients, int sockfd, struct sockaddr_in addr)
+struct client* add_client(struct clients_array *clients, int sockfd, struct sockaddr_in addr, char* nick)
 {
     if (clients->count == MAX_CLIENTS)
         return NULL;
 
     struct client *newclient = NULL;
-    init_client(&newclient, sockfd, addr);
+    init_client(&newclient, sockfd, addr, nick);
 
     clients->client[clients->count++] = newclient;
     return newclient;
